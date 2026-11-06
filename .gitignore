@@ -1,0 +1,5 @@
+build-vulkan/
+build-cpu/
+dist/
+server/target/
+*.log

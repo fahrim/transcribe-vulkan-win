@@ -1,0 +1,32 @@
+[package]
+name = "transcribe-server"
+version = "0.1.0"
+edition = "2021"
+
+# The companion engine for whisperlane's multilingual model families.
+# Build: set the environment first (build.ps1 does it):
+#   CMAKE_ARGS    the ggml Vulkan shader subset and the static MSVC runtime
+#   LIB           <Vulkan SDK>\Lib, so link.exe can find vulkan-1.lib
+#   RUSTFLAGS     -C target-feature=+crt-static, so no redistributable is needed
+#
+# Two binaries:
+#   cargo build --release                              Vulkan
+#   cargo build --release --no-default-features        processor
+
+[features]
+default = ["vulkan"]
+vulkan = ["transcribe-cpp/vulkan"]
+cpu = []
+
+[dependencies]
+transcribe-cpp = { version = "=0.4.1", default-features = false }
+hound = "3"
+serde_json = "1"
+tiny_http = "0.12"
+
+[patch.crates-io]
+transcribe-cpp = { git = "https://github.com/anomalyco/transcribe.cpp", rev = "2778ae4bf5ca5f394d129a39467f4ad9552dc34f" }
+transcribe-cpp-sys = { git = "https://github.com/anomalyco/transcribe.cpp", rev = "2778ae4bf5ca5f394d129a39467f4ad9552dc34f" }
+
+[profile.release]
+strip = true

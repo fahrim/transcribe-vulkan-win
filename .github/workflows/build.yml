@@ -1,0 +1,111 @@
+name: build
+
+# Builds transcribe-server for Windows x64 as two self-contained executables:
+# one with the Vulkan backend, one processor-only. transcribe.cpp ships no
+# Windows binaries, and the multilingual model families it carries (Qwen3-ASR
+# first) cannot run on whisper.cpp. Both are built with the static MSVC
+# runtime, so a clean machine without the Visual C++ redistributable can
+# still start them.
+
+on:
+  push:
+    branches: [main]
+    tags: ["engine-transcribe-*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The engine revision is pinned by server/Cargo.toml and Cargo.lock, so
+      # rebuilding a tag produces the same sources. This workflow deliberately
+      # does not resolve "latest": an engine surprise is a wrong answer, not a
+      # crash.
+      - name: Resolve revision
+        id: rev
+        shell: pwsh
+        run: |
+          $text = Get-Content server\Cargo.toml -Raw
+          if ($text -notmatch 'rev = "([0-9a-f]{40})"') {
+            Write-Error "no pinned revision in server/Cargo.toml"
+            exit 1
+          }
+          $full = $Matches[1]
+          "short=$($full.Substring(0,7))" >> $env:GITHUB_OUTPUT
+          "full=$full" >> $env:GITHUB_OUTPUT
+          Write-Host "transcribe.cpp revision: $full"
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk --version=1.4.363.0 -y
+          # The SDK installer can return before the environment is readable.
+          $sdk = "C:\VulkanSDK\1.4.363.0"
+          echo "VULKAN_SDK=$sdk" >> $env:GITHUB_ENV
+          echo "$sdk\Bin" >> $env:GITHUB_PATH
+          if (-not (Test-Path "$sdk\Bin\glslc.exe")) {
+            Write-Error "glslc.exe missing from $sdk\Bin"
+          }
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.99.1"
+
+      # A small whisper-tiny model keeps the smoke launch cheap; the engine it
+      # exercises is the same one that serves Qwen3-ASR. The model is never
+      # packaged.
+      - name: Fetch the smoke model
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          curl.exe -L --fail -o dist\smoke.gguf `
+            https://huggingface.co/handy-computer/whisper-tiny.en-gguf/resolve/main/whisper-tiny.en-Q4_K_M.gguf
+          if ($LASTEXITCODE -ne 0) { Write-Error "smoke model download failed" }
+
+      - name: Build the runtime
+        shell: pwsh
+        run: |
+          .\build.ps1 -SmokeModel .\dist\smoke.gguf
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $short = "${{ steps.rev.outputs.short }}"
+          $zip = "dist\transcribe-vulkan-win-x64-$short.zip"
+          Compress-Archive -Path "dist\runtime\*" -DestinationPath $zip
+          Get-ChildItem "dist\runtime" | Select-Object Name, Length
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          $short = "${{ steps.rev.outputs.short }}"
+          $zip = "dist\transcribe-vulkan-win-x64-$short.zip"
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  $(Split-Path $zip -Leaf)" | Out-File -Encoding ascii "dist\SHA256SUMS.txt"
+          Write-Host $hash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transcribe-vulkan-win-x64-${{ steps.rev.outputs.short }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transcribe-vulkan-win-checksums
+          path: dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/engine-transcribe-')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt
