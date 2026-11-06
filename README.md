@@ -117,6 +117,11 @@ Two details are easy to miss, and the script handles both:
 - The CMake build defaults to the DLL runtime; it is pinned to the static one
   so both halves of the executable agree.
 
+Both executables are also built with a portable CPU baseline
+(`GGML_NATIVE=OFF`): a build that targets the machine that produced it runs on
+no other, and an engine is the one component where a surprise is a wrong
+answer. The baseline still assumes AVX2, as the whisper builds do.
+
 See `.github/workflows/build.yml` for the release sequence.
 
 ## License

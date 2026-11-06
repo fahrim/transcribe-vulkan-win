@@ -98,7 +98,7 @@ foreach ($tool in @("cargo", "cmake", "git")) {
 # the catalogue uses; ggml aborts a Vulkan run whose weights need any other.
 # RUSTFLAGS link the Rust side statically too, so no VCRUNTIME140 or UCRT
 # import reaches the import table.
-$env:CMAKE_ARGS = "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DGGML_VULKAN_SHADER_TYPES=f32,f16,q8_0,q5_0 -DGGML_VULKAN_MUL_MAT_ID=OFF"
+$env:CMAKE_ARGS = "-DGGML_NATIVE=OFF -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DGGML_VULKAN_SHADER_TYPES=f32,f16,q8_0,q5_0 -DGGML_VULKAN_MUL_MAT_ID=OFF"
 $env:LIB = "$VulkanSdk\Lib;$env:LIB"
 $env:RUSTFLAGS = "-C target-feature=+crt-static"
 $env:VULKAN_SDK = $VulkanSdk
